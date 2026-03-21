@@ -20,6 +20,15 @@ from src.data.dataset import (
     get_dataset,
     maybe_sample_dataset,
 )
+from src.evaluation.metrics import (
+    build_error_table,
+    classification_metrics,
+    confusion_matrix_frame,
+    save_evaluation_artifacts,
+)
+
+
+ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
 
 
 @dataclass(slots=True)
@@ -34,6 +43,7 @@ class BaselineConfig:
     max_iter: int = 1000
     random_state: int = 42
     sample_size: int | None = None
+    output_dir: Path = Path("artifacts/baseline")
 
 
 def dataset_to_xy(
@@ -90,16 +100,36 @@ def run_baseline(config: BaselineConfig) -> dict[str, object]:
 
     validation_predictions = pipeline.predict(x_validation)
     test_predictions = pipeline.predict(x_test)
+    validation_metrics = classification_metrics(
+        y_validation, validation_predictions.tolist()
+    )
+    test_metrics = classification_metrics(y_test, test_predictions.tolist())
+    confusion = confusion_matrix_frame(
+        y_test,
+        test_predictions.tolist(),
+        labels=[ID2LABEL[index] for index in sorted(ID2LABEL)],
+    )
+    errors = build_error_table(
+        x_test,
+        y_test,
+        test_predictions.tolist(),
+        id2label=ID2LABEL,
+    )
+    save_evaluation_artifacts(
+        config.output_dir,
+        metrics=test_metrics,
+        confusion=confusion,
+        errors=errors,
+    )
 
     return {
         "pipeline": pipeline,
-        "validation_accuracy": accuracy_score(y_validation, validation_predictions),
-        "validation_f1_macro": f1_score(
-            y_validation, validation_predictions, average="macro"
-        ),
-        "test_accuracy": accuracy_score(y_test, test_predictions),
-        "test_f1_macro": f1_score(y_test, test_predictions, average="macro"),
-        "test_report": classification_report(y_test, test_predictions),
+        "validation_accuracy": validation_metrics["accuracy"],
+        "validation_f1_macro": validation_metrics["f1_macro"],
+        "test_accuracy": test_metrics["accuracy"],
+        "test_f1_macro": test_metrics["f1_macro"],
+        "test_report": test_metrics["report_text"],
+        "output_dir": config.output_dir,
     }
 
 
@@ -115,6 +145,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-df", type=int, default=3)
     parser.add_argument("--max-iter", type=int, default=1000)
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
+    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/baseline"))
     return parser.parse_args()
 
 
@@ -127,6 +158,7 @@ def main() -> None:
         ngram_max=args.ngram_max,
         min_df=args.min_df,
         max_iter=args.max_iter,
+        output_dir=args.output_dir,
     )
     results = run_baseline(config)
 
@@ -135,6 +167,7 @@ def main() -> None:
     print(f"Validation macro F1: {results['validation_f1_macro']:.4f}")
     print(f"Test accuracy: {results['test_accuracy']:.4f}")
     print(f"Test macro F1: {results['test_f1_macro']:.4f}")
+    print(f"Saved evaluation artifacts to: {results['output_dir']}")
     print("\nClassification report:\n")
     print(results["test_report"])
 

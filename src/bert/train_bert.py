@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from datasets import DatasetDict
@@ -11,6 +13,8 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
+    EvalPrediction,
+    PreTrainedTokenizerBase,
     Trainer,
     TrainingArguments,
 )
@@ -24,14 +28,22 @@ from src.data.dataset import (
     maybe_sample_dataset,
     prepare_text_classification_dataset,
 )
+from src.evaluation.metrics import (
+    build_error_table,
+    classification_metrics,
+    confusion_matrix_frame,
+    save_evaluation_artifacts,
+)
 
 
 MODEL_NAME = "ai-forever/ruBERT-base"
+ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
+LABEL2ID = {value: key for key, value in ID2LABEL.items()}
 
 
 def prepare_dataset(
     dataset: DatasetDict,
-    tokenizer: AutoTokenizer,
+    tokenizer: PreTrainedTokenizerBase,
     max_length: int,
     keep_label_text: bool,
 ) -> DatasetDict:
@@ -40,7 +52,7 @@ def prepare_dataset(
         keep_label_text=keep_label_text,
     )
 
-    def tokenize_batch(batch: dict[str, list[str]]) -> dict[str, list[int]]:
+    def tokenize_batch(batch: dict[str, list[str]]) -> dict[str, Any]:
         return tokenizer(
             batch["text"],
             truncation=True,
@@ -63,8 +75,9 @@ def prepare_dataset(
     return tokenized
 
 
-def compute_metrics(eval_prediction: tuple[np.ndarray, np.ndarray]) -> dict[str, float]:
-    logits, labels = eval_prediction
+def compute_metrics(eval_prediction: EvalPrediction) -> dict[str, float]:
+    logits = eval_prediction.predictions
+    labels = eval_prediction.label_ids
     predictions = np.argmax(logits, axis=-1)
 
     return {
@@ -84,6 +97,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=2e-5)
     parser.add_argument("--sample-size", type=int, default=None)
+    parser.add_argument("--output-dir", type=Path, default=Path("artifacts/bert"))
     parser.add_argument(
         "--keep-label-text",
         action="store_true",
@@ -120,12 +134,12 @@ def main() -> None:
     model = AutoModelForSequenceClassification.from_pretrained(
         args.model_name,
         num_labels=3,
-        id2label={0: "negative", 1: "neutral", 2: "positive"},
-        label2id={"negative": 0, "neutral": 1, "positive": 2},
+        id2label=ID2LABEL,
+        label2id=LABEL2ID,
     )
 
     training_args = TrainingArguments(
-        output_dir="artifacts/bert",
+        output_dir=str(args.output_dir),
         eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="steps",
@@ -151,8 +165,30 @@ def main() -> None:
     )
 
     trainer.train()
-    metrics = trainer.evaluate(tokenized_dataset["test"])
-    print(metrics)
+    test_dataset = tokenized_dataset["test"]
+    metrics = trainer.evaluate(eval_dataset=test_dataset)
+
+    predictions = trainer.predict(test_dataset)
+    y_pred = np.argmax(predictions.predictions, axis=-1).tolist()
+    y_true = predictions.label_ids.tolist()
+    texts = dataset["test"]["text"]
+
+    report_metrics = classification_metrics(y_true, y_pred)
+    confusion = confusion_matrix_frame(
+        y_true,
+        y_pred,
+        labels=[ID2LABEL[index] for index in sorted(ID2LABEL)],
+    )
+    errors = build_error_table(texts, y_true, y_pred, id2label=ID2LABEL)
+    save_evaluation_artifacts(
+        args.output_dir,
+        metrics=report_metrics,
+        confusion=confusion,
+        errors=errors,
+    )
+
+    print(json.dumps(metrics, ensure_ascii=False, indent=2, default=str))
+    print(f"Saved evaluation artifacts to: {args.output_dir}")
 
 
 if __name__ == "__main__":
