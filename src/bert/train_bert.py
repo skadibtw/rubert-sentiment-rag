@@ -117,7 +117,10 @@ def main() -> None:
     dataset = get_dataset(cache_dir=args.cache_dir)
     dataset = maybe_sample_dataset(dataset, args.sample_size)
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.model_name,
+        fix_mistral_regex=True,
+    )
     tokenized_dataset = prepare_dataset(
         dataset=dataset,
         tokenizer=tokenizer,
