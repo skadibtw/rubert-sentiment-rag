@@ -1,0 +1,70 @@
+{
+  "builder_name": "json",
+  "citation": "",
+  "config_name": "default",
+  "dataset_name": "ru-reviews-classification",
+  "dataset_size": 20242677,
+  "description": "",
+  "download_checksums": {
+    "hf://datasets/ai-forever/ru-reviews-classification@0f67d914f396ce22917dc6463ec619799b3b08d2/train.jsonl": {
+      "num_bytes": 13331689,
+      "checksum": null
+    },
+    "hf://datasets/ai-forever/ru-reviews-classification@0f67d914f396ce22917dc6463ec619799b3b08d2/validation.jsonl": {
+      "num_bytes": 4430120,
+      "checksum": null
+    },
+    "hf://datasets/ai-forever/ru-reviews-classification@0f67d914f396ce22917dc6463ec619799b3b08d2/test.jsonl": {
+      "num_bytes": 4445075,
+      "checksum": null
+    }
+  },
+  "download_size": 22206884,
+  "features": {
+    "text": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "label_text": {
+      "dtype": "string",
+      "_type": "Value"
+    },
+    "label": {
+      "dtype": "int64",
+      "_type": "Value"
+    },
+    "id": {
+      "dtype": "string",
+      "_type": "Value"
+    }
+  },
+  "homepage": "",
+  "license": "",
+  "size_in_bytes": 42449561,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 12153213,
+      "num_examples": 45000,
+      "dataset_name": "ru-reviews-classification"
+    },
+    "validation": {
+      "name": "validation",
+      "num_bytes": 4037317,
+      "num_examples": 15000,
+      "dataset_name": "ru-reviews-classification"
+    },
+    "test": {
+      "name": "test",
+      "num_bytes": 4052147,
+      "num_examples": 15000,
+      "dataset_name": "ru-reviews-classification"
+    }
+  },
+  "version": {
+    "version_str": "0.0.0",
+    "major": 0,
+    "minor": 0,
+    "patch": 0
+  }
+}
