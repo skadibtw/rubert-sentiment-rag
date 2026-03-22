@@ -41,6 +41,16 @@ ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
 LABEL2ID = {value: key for key, value in ID2LABEL.items()}
 
 
+def load_tokenizer(model_name: str) -> PreTrainedTokenizerBase:
+    try:
+        return AutoTokenizer.from_pretrained(
+            model_name,
+            fix_mistral_regex=True,
+        )
+    except TypeError:
+        return AutoTokenizer.from_pretrained(model_name)
+
+
 def prepare_dataset(
     dataset: DatasetDict,
     tokenizer: PreTrainedTokenizerBase,
@@ -117,10 +127,7 @@ def main() -> None:
     dataset = get_dataset(cache_dir=args.cache_dir)
     dataset = maybe_sample_dataset(dataset, args.sample_size)
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name,
-        fix_mistral_regex=True,
-    )
+    tokenizer = load_tokenizer(args.model_name)
     tokenized_dataset = prepare_dataset(
         dataset=dataset,
         tokenizer=tokenizer,

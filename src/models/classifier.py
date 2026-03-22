@@ -11,10 +11,18 @@ class BertSentimentClassifier(nn.Module):
         model_name: str,
         num_labels: int,
         dropout: float = 0.1,
+        local_files_only: bool = False,
     ) -> None:
         super().__init__()
-        self.config = AutoConfig.from_pretrained(model_name)
-        self.encoder = AutoModel.from_pretrained(model_name, config=self.config)
+        self.config = AutoConfig.from_pretrained(
+            model_name,
+            local_files_only=local_files_only,
+        )
+        self.encoder = AutoModel.from_pretrained(
+            model_name,
+            config=self.config,
+            local_files_only=local_files_only,
+        )
         self.dropout = nn.Dropout(dropout)
         self.classifier = nn.Linear(self.config.hidden_size, num_labels)
 

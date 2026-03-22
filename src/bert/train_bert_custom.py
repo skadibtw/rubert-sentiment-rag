@@ -39,6 +39,16 @@ MODEL_NAME = "ai-forever/ruBERT-base"
 ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
 
 
+def load_tokenizer(model_name: str) -> PreTrainedTokenizerBase:
+    try:
+        return AutoTokenizer.from_pretrained(
+            model_name,
+            fix_mistral_regex=True,
+        )
+    except TypeError:
+        return AutoTokenizer.from_pretrained(model_name)
+
+
 def prepare_dataset(
     dataset: DatasetDict,
     tokenizer: PreTrainedTokenizerBase,
@@ -97,10 +107,7 @@ def main() -> None:
     dataset = maybe_sample_dataset(
         get_dataset(cache_dir=args.cache_dir), args.sample_size
     )
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name,
-        fix_mistral_regex=True,
-    )
+    tokenizer = load_tokenizer(args.model_name)
     tokenized_dataset = prepare_dataset(
         dataset=dataset,
         tokenizer=tokenizer,
@@ -177,6 +184,18 @@ def main() -> None:
         "test_accuracy": report_metrics["accuracy"],
         "test_f1_macro": report_metrics["f1_macro"],
     }
+    metadata = {
+        "model_name": args.model_name,
+        "checkpoint_path": str(best_checkpoint.relative_to(args.output_dir)),
+        "tokenizer_dir": "checkpoints/tokenizer",
+        "max_length": args.max_length,
+        "dropout": args.dropout,
+        "id2label": ID2LABEL,
+    }
+    (args.output_dir / "model_metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     print(f"Saved evaluation artifacts to: {args.output_dir}")
 
