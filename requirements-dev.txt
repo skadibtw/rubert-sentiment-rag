@@ -1,2 +1,4 @@
 -r requirements-base.txt
-torch
+httpx
+pytest
+ruff

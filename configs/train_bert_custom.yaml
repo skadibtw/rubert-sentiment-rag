@@ -1,0 +1,15 @@
+cache_dir: data/cache/ru_reviews
+model_name: ai-forever/ruBERT-base
+max_length: 256
+epochs: 3
+batch_size: 16
+learning_rate: 0.00002
+weight_decay: 0.01
+warmup_ratio: 0.1
+max_grad_norm: 1.0
+sample_size:
+num_workers: 0
+output_dir: artifacts/bert_custom
+dropout: 0.1
+keep_label_text: false
+dry_run: false

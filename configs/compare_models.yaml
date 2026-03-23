@@ -1,0 +1,4 @@
+output_dir: artifacts/comparison
+baseline_dir: artifacts/baseline
+bert_dir: artifacts/bert
+custom_dir: artifacts/bert_custom

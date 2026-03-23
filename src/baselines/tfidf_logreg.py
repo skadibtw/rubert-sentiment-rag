@@ -8,7 +8,6 @@ from pathlib import Path
 from datasets import Dataset
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report, f1_score
 from sklearn.pipeline import Pipeline
 
 if __package__ is None or __package__ == "":
@@ -26,7 +25,6 @@ from src.evaluation.metrics import (
     confusion_matrix_frame,
     save_evaluation_artifacts,
 )
-
 
 ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
 

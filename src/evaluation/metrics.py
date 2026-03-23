@@ -42,7 +42,7 @@ def build_error_table(
     id2label: dict[int, str] | None = None,
 ) -> pd.DataFrame:
     rows = []
-    for text, true_label, pred_label in zip(texts, y_true, y_pred):
+    for text, true_label, pred_label in zip(texts, y_true, y_pred, strict=False):
         if true_label == pred_label:
             continue
         rows.append(

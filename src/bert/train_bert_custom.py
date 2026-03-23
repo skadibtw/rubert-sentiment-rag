@@ -34,7 +34,6 @@ from src.training import (
     fit,
 )
 
-
 MODEL_NAME = "ai-forever/ruBERT-base"
 ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
 

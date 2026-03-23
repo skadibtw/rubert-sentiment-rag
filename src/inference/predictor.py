@@ -66,7 +66,10 @@ class SentimentPredictor:
 
         results = []
         for source_text, label_id, scores in zip(
-            texts, predictions, probabilities.tolist()
+            texts,
+            predictions,
+            probabilities.tolist(),
+            strict=False,
         ):
             label_scores = {
                 self.config.id2label[index]: round(score, 6)

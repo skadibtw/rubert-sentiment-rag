@@ -1,6 +1,6 @@
 from .dataset import (
-    DEFAULT_CACHE_DIR,
     DATASET_NAME,
+    DEFAULT_CACHE_DIR,
     clean_text,
     get_dataset,
     maybe_sample_dataset,

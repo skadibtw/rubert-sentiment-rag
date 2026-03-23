@@ -35,7 +35,6 @@ from src.evaluation.metrics import (
     save_evaluation_artifacts,
 )
 
-
 MODEL_NAME = "ai-forever/ruBERT-base"
 ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
 LABEL2ID = {value: key for key, value in ID2LABEL.items()}

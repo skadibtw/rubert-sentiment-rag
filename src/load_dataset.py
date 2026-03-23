@@ -1,4 +1,4 @@
-from src.data.dataset import DEFAULT_CACHE_DIR, DATASET_NAME, get_dataset, main
+from src.data.dataset import DATASET_NAME, DEFAULT_CACHE_DIR, get_dataset, main
 
 __all__ = ["DEFAULT_CACHE_DIR", "DATASET_NAME", "get_dataset", "main"]
 
