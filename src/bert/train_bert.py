@@ -13,10 +13,12 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
+    EarlyStoppingCallback,
     EvalPrediction,
     PreTrainedTokenizerBase,
     Trainer,
     TrainingArguments,
+    set_seed,
 )
 
 if __package__ is None or __package__ == "":
@@ -105,6 +107,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=2e-5)
+    parser.add_argument("--weight-decay", type=float, default=0.01)
+    parser.add_argument("--warmup-ratio", type=float, default=0.1)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
+    parser.add_argument("--save-total-limit", type=int, default=2)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--early-stopping-patience", type=int, default=None)
     parser.add_argument("--sample-size", type=int, default=None)
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts/bert"))
     parser.add_argument(
@@ -122,6 +130,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    set_seed(args.seed)
 
     dataset = get_dataset(cache_dir=args.cache_dir)
     dataset = maybe_sample_dataset(dataset, args.sample_size)
@@ -154,14 +163,27 @@ def main() -> None:
         logging_strategy="steps",
         logging_steps=50,
         learning_rate=args.learning_rate,
+        warmup_ratio=args.warmup_ratio,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         num_train_epochs=args.epochs,
-        weight_decay=0.01,
+        weight_decay=args.weight_decay,
         load_best_model_at_end=True,
         metric_for_best_model="f1_macro",
+        greater_is_better=True,
+        save_total_limit=args.save_total_limit,
+        seed=args.seed,
         report_to="none",
     )
+
+    callbacks = []
+    if args.early_stopping_patience is not None:
+        callbacks.append(
+            EarlyStoppingCallback(
+                early_stopping_patience=args.early_stopping_patience,
+            )
+        )
 
     trainer = Trainer(
         model=model,
@@ -171,6 +193,7 @@ def main() -> None:
         processing_class=tokenizer,
         data_collator=DataCollatorWithPadding(tokenizer=tokenizer),
         compute_metrics=compute_metrics,
+        callbacks=callbacks,
     )
 
     trainer.train()

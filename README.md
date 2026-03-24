@@ -49,7 +49,7 @@ Current local runs cover the baseline and both transformer variants:
 
 | Model | Accuracy | Macro F1 | Notes |
 |-------|----------|----------|-------|
-| `bert_trainer` | 0.7771 | 0.7792 | Best result so far |
+| `bert_trainer` | 0.7830 | 0.7848 | Best result so far |
 | `bert_custom` | 0.7760 | 0.7787 | Custom PyTorch loop |
 | `baseline` | 0.7452 | 0.7468 | TF-IDF + LogisticRegression |
 
