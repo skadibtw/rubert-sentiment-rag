@@ -19,6 +19,10 @@ def main() -> None:
     if model_dir is not None:
         os.environ["MODEL_DIR"] = str(model_dir)
 
+    rag_index_dir = config.get("rag_index_dir")
+    if rag_index_dir is not None:
+        os.environ["RAG_INDEX_DIR"] = str(rag_index_dir)
+
     uvicorn.run(
         "src.api.app:app",
         host=str(config.get("host", "127.0.0.1")),

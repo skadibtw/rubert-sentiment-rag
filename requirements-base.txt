@@ -5,6 +5,7 @@ pandas
 pydantic
 pyyaml
 scikit-learn
+sentence-transformers
 tqdm
 transformers
 uvicorn

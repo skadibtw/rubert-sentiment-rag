@@ -2,7 +2,8 @@
 
 An end-to-end NLP pet project for sentiment classification of Russian app reviews.
 The repository includes dataset preparation, a TF-IDF baseline, two ruBERT training pipelines,
-evaluation artifacts, inference utilities, a FastAPI service, and a lightweight browser demo.
+evaluation artifacts, inference utilities, a lightweight local RAG layer over the review corpus,
+a FastAPI service, and a browser demo.
 
 ## Why this project exists
 
@@ -13,12 +14,13 @@ This project is built to show practical ML engineering skills, not just model fi
 - custom PyTorch training loop alongside Hugging Face Trainer
 - repeatable evaluation with saved reports and error analysis
 - inference packaging for API usage
+- retrieval-augmented question answering over real review texts
 - project ergonomics: configs, tests, Docker, and CI
 
 ## Stack
 
 - Python, PyTorch, Hugging Face Transformers, Datasets
-- scikit-learn, pandas, FastAPI, Uvicorn
+- sentence-transformers, scikit-learn, pandas, FastAPI, Uvicorn
 - pytest, Ruff, GitHub Actions
 
 ## Repository layout
@@ -35,6 +37,7 @@ nlp_pet_project/
 │   ├── evaluation/           # metrics, reports, comparison helpers
 │   ├── inference/            # predictor loading and batch inference
 │   ├── models/               # ruBERT classifier module
+│   ├── rag/                  # local review indexing and retrieval QA
 │   ├── training/             # custom trainer implementation
 │   └── utils/                # shared config helpers
 ├── tests/                    # unit and API smoke tests
@@ -100,7 +103,21 @@ python -m scripts.train_bert_custom
 python -m scripts.compare_models
 ```
 
-### 6. Launch API and demo
+### 6. Build the review RAG index
+
+```bash
+python -m scripts.build_rag_index
+```
+
+The default config indexes a local sample for faster setup. Set `sample_size:` to blank in `configs/build_rag_index.yaml` to build the index over the full corpus.
+
+### 7. Ask the indexed reviews from CLI
+
+```bash
+python -m scripts.run_rag_demo
+```
+
+### 8. Launch API and demo
 
 ```bash
 python -m scripts.run_api
@@ -119,6 +136,8 @@ All main entrypoints read YAML configs from `configs/`.
 - `configs/train_bert.yaml`
 - `configs/train_bert_custom.yaml`
 - `configs/compare_models.yaml`
+- `configs/build_rag_index.yaml`
+- `configs/rag_demo.yaml`
 - `configs/api.yaml`
 
 You can keep defaults in config files and still override them by editing YAML before launch.
@@ -136,6 +155,41 @@ Request:
 ```json
 {
   "text": "Приложение стало работать заметно лучше после обновления"
+}
+```
+
+### `POST /ask`
+
+Request:
+
+```json
+{
+  "question": "На что чаще всего жалуются после обновления?",
+  "top_k": 5,
+  "sentiment_focus": "negative"
+}
+```
+
+Response shape:
+
+```json
+{
+  "question": "На что чаще всего жалуются после обновления?",
+  "answer": "Found 5 relevant reviews for: ...",
+  "sentiment_focus": "negative",
+  "keyphrases": ["последнее обновление", "медленно работает"],
+  "label_distribution": {
+    "negative": 5
+  },
+  "contexts": [
+    {
+      "text": "После обновления приложение стало медленным.",
+      "label_id": 0,
+      "label": "negative",
+      "split": "train",
+      "score": 0.91
+    }
+  ]
 }
 ```
 
@@ -158,6 +212,7 @@ Response:
 
 The root page serves a small interactive interface for manual testing.
 It uses the same `/predict` endpoint as the API, so the UI and backend stay aligned.
+RAG is exposed through `/ask`, Swagger UI, and the CLI demo script.
 
 ## Testing and linting
 
@@ -185,6 +240,6 @@ The container expects model files to be available inside the image or mounted at
 
 ## Next ideas
 
-- add a RAG module over the review corpus
+- add an optional LLM-backed answer generator on top of retrieved reviews
 - export plots for confusion matrix and learning curves in README
 - add experiment tracking with W&B or MLflow

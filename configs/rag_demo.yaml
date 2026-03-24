@@ -1,0 +1,5 @@
+question: Какие проблемы пользователи чаще всего упоминают после обновления?
+index_dir: artifacts/rag
+top_k: 5
+sentiment_focus: negative
+device:
