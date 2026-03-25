@@ -1,5 +1,6 @@
 datasets
 fastapi
+httpx
 numpy
 pandas
 pydantic

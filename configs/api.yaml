@@ -3,3 +3,6 @@ port: 8000
 reload: false
 model_dir: artifacts/bert_custom
 rag_index_dir: artifacts/rag
+rag_generation_mode: auto
+rag_llm_model:
+rag_llm_base_url:

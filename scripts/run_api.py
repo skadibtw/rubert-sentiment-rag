@@ -23,6 +23,18 @@ def main() -> None:
     if rag_index_dir is not None:
         os.environ["RAG_INDEX_DIR"] = str(rag_index_dir)
 
+    rag_generation_mode = config.get("rag_generation_mode")
+    if rag_generation_mode is not None:
+        os.environ["RAG_GENERATION_MODE"] = str(rag_generation_mode)
+
+    rag_llm_model = config.get("rag_llm_model")
+    if rag_llm_model is not None:
+        os.environ["RAG_LLM_MODEL"] = str(rag_llm_model)
+
+    rag_llm_base_url = config.get("rag_llm_base_url")
+    if rag_llm_base_url is not None:
+        os.environ["RAG_LLM_BASE_URL"] = str(rag_llm_base_url)
+
     uvicorn.run(
         "src.api.app:app",
         host=str(config.get("host", "127.0.0.1")),

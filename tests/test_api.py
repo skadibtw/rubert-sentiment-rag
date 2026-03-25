@@ -30,12 +30,21 @@ class FakePredictor:
 
 
 class FakeRAG:
-    def answer(self, question: str, *, top_k: int, sentiment_focus: str | None):
-        del top_k, sentiment_focus
+    def answer(
+        self,
+        question: str,
+        *,
+        top_k: int,
+        sentiment_focus: str | None,
+        generation_mode: str | None = None,
+    ):
+        del top_k, sentiment_focus, generation_mode
         return SimpleNamespace(
             question=question,
             answer="Found relevant reviews about slow updates.",
             sentiment_focus="negative",
+            generation_mode="llm",
+            llm_used=True,
             keyphrases=["последнее обновление", "медленно работает"],
             label_distribution={"negative": 2},
             contexts=[
@@ -102,6 +111,8 @@ def test_ask_endpoint_uses_loaded_rag_pipeline(tmp_path, monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["sentiment_focus"] == "negative"
+    assert payload["generation_mode"] == "llm"
+    assert payload["llm_used"] is True
     assert payload["label_distribution"]["negative"] == 2
     assert payload["contexts"][0]["label"] == "negative"
 

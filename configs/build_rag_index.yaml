@@ -2,5 +2,5 @@ cache_dir: data/cache/ru_reviews
 output_dir: artifacts/rag
 model_name: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 batch_size: 64
-sample_size: 5000
+sample_size:
 device:

@@ -4,7 +4,13 @@ from pathlib import Path
 
 import numpy as np
 
-from src.rag.pipeline import ReviewRAG, extract_keyphrases, infer_sentiment_focus
+from src.rag.pipeline import (
+    LLMConfig,
+    ReviewRAG,
+    extract_keyphrases,
+    infer_sentiment_focus,
+    resolve_generation_mode,
+)
 
 
 class FakeEncoder:
@@ -37,6 +43,14 @@ def test_extract_keyphrases_returns_non_empty_list() -> None:
     assert phrases
 
 
+def test_resolve_generation_mode_falls_back_without_llm_credentials() -> None:
+    config = LLMConfig(
+        mode="auto", model="gpt-4o-mini", base_url="https://api.openai.com/v1"
+    )
+
+    assert resolve_generation_mode(None, config) == "extractive"
+
+
 def test_review_rag_returns_most_relevant_contexts() -> None:
     rag = ReviewRAG(
         index_dir=Path("artifacts/rag"),
@@ -62,5 +76,7 @@ def test_review_rag_returns_most_relevant_contexts() -> None:
     response = rag.answer("Почему после обновления все стало медленнее?", top_k=1)
 
     assert response.sentiment_focus == "negative"
+    assert response.generation_mode == "extractive"
+    assert response.llm_used is False
     assert response.contexts[0].label == "negative"
     assert "Found 1 relevant reviews" in response.answer

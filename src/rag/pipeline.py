@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -21,6 +23,8 @@ from src.training import detect_device
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 DEFAULT_RAG_DIR = Path("artifacts/rag")
 DEFAULT_TOP_K = 5
+DEFAULT_GENERATION_MODE = "auto"
+DEFAULT_LLM_TIMEOUT = 45.0
 RUSSIAN_STOPWORDS = {
     "это",
     "как",
@@ -115,9 +119,20 @@ class RAGResponse:
     question: str
     answer: str
     sentiment_focus: str | None
+    generation_mode: str
+    llm_used: bool
     keyphrases: list[str]
     label_distribution: dict[str, int]
     contexts: list[RetrievedReview]
+
+
+@dataclass(slots=True)
+class LLMConfig:
+    mode: str = DEFAULT_GENERATION_MODE
+    model: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    timeout: float = DEFAULT_LLM_TIMEOUT
 
 
 def _resolve_device(device: str | None) -> str:
@@ -130,6 +145,42 @@ def _load_encoder(model_name: str, device: str | None = None) -> Any:
     from sentence_transformers import SentenceTransformer
 
     return SentenceTransformer(model_name, device=_resolve_device(device))
+
+
+def load_llm_config(mode: str | None = None) -> LLMConfig:
+    return LLMConfig(
+        mode=mode or os.getenv("RAG_GENERATION_MODE", DEFAULT_GENERATION_MODE),
+        model=os.getenv("OPENAI_MODEL") or os.getenv("RAG_LLM_MODEL"),
+        base_url=(
+            os.getenv("OPENAI_BASE_URL")
+            or os.getenv("RAG_LLM_BASE_URL")
+            or "https://api.openai.com/v1"
+        ),
+        api_key=os.getenv("OPENAI_API_KEY") or os.getenv("RAG_LLM_API_KEY"),
+        timeout=float(os.getenv("RAG_LLM_TIMEOUT", DEFAULT_LLM_TIMEOUT)),
+    )
+
+
+def is_llm_available(config: LLMConfig) -> bool:
+    if not config.model or not config.base_url:
+        return False
+    if "api.openai.com" in config.base_url and not config.api_key:
+        return False
+    return True
+
+
+def resolve_generation_mode(
+    requested_mode: str | None,
+    config: LLMConfig,
+) -> str:
+    mode = (requested_mode or config.mode or DEFAULT_GENERATION_MODE).casefold()
+    if mode not in {"auto", "extractive", "llm"}:
+        mode = DEFAULT_GENERATION_MODE
+    if mode == "extractive":
+        return "extractive"
+    if mode == "llm":
+        return "llm" if is_llm_available(config) else "extractive"
+    return "llm" if is_llm_available(config) else "extractive"
 
 
 def _build_records(dataset: Any) -> list[dict[str, Any]]:
@@ -273,6 +324,97 @@ def compose_answer(
     return " ".join(fragments)
 
 
+def compose_llm_prompt(
+    question: str,
+    contexts: list[RetrievedReview],
+    sentiment_focus: str | None,
+    keyphrases: list[str],
+    label_distribution: dict[str, int],
+) -> str:
+    context_lines = []
+    for index, item in enumerate(contexts, start=1):
+        context_lines.append(
+            (
+                f"[{index}] label={item.label}; split={item.split}; "
+                f"score={item.score:.4f}; text={item.text}"
+            )
+        )
+    focus_line = sentiment_focus or "not specified"
+    keyphrase_line = ", ".join(keyphrases) if keyphrases else "none"
+    distribution_line = ", ".join(
+        f"{label}: {count}" for label, count in label_distribution.items()
+    )
+    return "\n".join(
+        [
+            "Answer in Russian.",
+            "Use only the evidence below.",
+            "If the evidence is weak, say that the conclusion is approximate.",
+            f"Question: {question}",
+            f"Sentiment focus: {focus_line}",
+            f"Key phrases: {keyphrase_line}",
+            f"Label distribution: {distribution_line}",
+            "Evidence:",
+            *context_lines,
+            (
+                "Give a concise answer followed by 2-4 bullet-like findings "
+                "in one paragraph."
+            ),
+        ]
+    )
+
+
+def generate_llm_answer(
+    question: str,
+    contexts: list[RetrievedReview],
+    sentiment_focus: str | None,
+    keyphrases: list[str],
+    label_distribution: dict[str, int],
+    config: LLMConfig,
+) -> str:
+    if not is_llm_available(config):
+        raise RuntimeError("LLM generation is not configured")
+
+    base_url = str(config.base_url).rstrip("/")
+    headers = {"Content-Type": "application/json"}
+    if config.api_key:
+        headers["Authorization"] = f"Bearer {config.api_key}"
+
+    payload = {
+        "model": config.model,
+        "temperature": 0.2,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You summarize user review corpora. Ground every answer in the "
+                    "provided evidence and do not invent product facts."
+                ),
+            },
+            {
+                "role": "user",
+                "content": compose_llm_prompt(
+                    question,
+                    contexts,
+                    sentiment_focus,
+                    keyphrases,
+                    label_distribution,
+                ),
+            },
+        ],
+    }
+
+    response = httpx.post(
+        f"{base_url}/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=config.timeout,
+    )
+    response.raise_for_status()
+    data = response.json()
+    message = data["choices"][0]["message"]["content"]
+    return str(message).strip()
+
+
 def build_review_index(
     *,
     cache_dir: Path = DEFAULT_CACHE_DIR,
@@ -321,6 +463,7 @@ class ReviewRAG:
         embedding_model: str,
         device: str | None = None,
         encoder: Any | None = None,
+        llm_config: LLMConfig | None = None,
     ) -> None:
         self.index_dir = index_dir
         self.records = records
@@ -328,6 +471,7 @@ class ReviewRAG:
         self.embedding_model = embedding_model
         self.device = device
         self._encoder = encoder
+        self.llm_config = llm_config or load_llm_config()
 
     @property
     def encoder(self) -> Any:
@@ -385,6 +529,7 @@ class ReviewRAG:
         *,
         top_k: int = DEFAULT_TOP_K,
         sentiment_focus: str | None = None,
+        generation_mode: str | None = None,
     ) -> RAGResponse:
         resolved_focus = sentiment_focus or infer_sentiment_focus(question)
         contexts = self.search(
@@ -394,17 +539,42 @@ class ReviewRAG:
         )
         label_distribution = dict(Counter(item.label for item in contexts))
         keyphrases = extract_keyphrases([item.text for item in contexts])
-        answer = compose_answer(
-            question,
-            contexts,
-            resolved_focus,
-            keyphrases,
-            label_distribution,
-        )
+        resolved_mode = resolve_generation_mode(generation_mode, self.llm_config)
+        llm_used = False
+        if resolved_mode == "llm":
+            try:
+                answer = generate_llm_answer(
+                    question,
+                    contexts,
+                    resolved_focus,
+                    keyphrases,
+                    label_distribution,
+                    self.llm_config,
+                )
+                llm_used = True
+            except Exception:
+                resolved_mode = "extractive"
+                answer = compose_answer(
+                    question,
+                    contexts,
+                    resolved_focus,
+                    keyphrases,
+                    label_distribution,
+                )
+        else:
+            answer = compose_answer(
+                question,
+                contexts,
+                resolved_focus,
+                keyphrases,
+                label_distribution,
+            )
         return RAGResponse(
             question=question,
             answer=answer,
             sentiment_focus=resolved_focus,
+            generation_mode=resolved_mode,
+            llm_used=llm_used,
             keyphrases=keyphrases,
             label_distribution=label_distribution,
             contexts=contexts,
@@ -416,6 +586,7 @@ def load_review_rag(
     *,
     device: str | None = None,
     encoder: Any | None = None,
+    llm_config: LLMConfig | None = None,
 ) -> ReviewRAG:
     metadata_path = index_dir / "metadata.json"
     reviews_path = index_dir / "reviews.jsonl"
@@ -439,6 +610,7 @@ def load_review_rag(
         embedding_model=str(metadata["embedding_model"]),
         device=device,
         encoder=encoder,
+        llm_config=llm_config,
     )
 
 

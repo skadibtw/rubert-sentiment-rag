@@ -15,6 +15,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--index-dir", type=Path, default=DEFAULT_RAG_DIR)
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--sentiment-focus", default=None)
+    parser.add_argument("--generation-mode", default=None)
     parser.add_argument("--device", default=None)
     args = parser.parse_args()
     args.question = args.question or args.question_flag
@@ -30,6 +31,7 @@ def main() -> None:
         args.question,
         top_k=args.top_k,
         sentiment_focus=args.sentiment_focus,
+        generation_mode=args.generation_mode,
     )
     print(json.dumps(asdict(response), ensure_ascii=False, indent=2))
 
