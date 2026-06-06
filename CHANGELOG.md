@@ -20,6 +20,6 @@
 
 ## Stage 4 - Review intelligence
 
-- indexed the review corpus with sentence-transformer embeddings
+- indexed the review corpus with LangChain HuggingFace embeddings and a local ChromaDB vector store
 - added retrieval QA over the corpus through CLI and FastAPI
-- prepared the project for optional LLM-backed answer synthesis on top of retrieved reviews
+- added optional LangChain ChatOpenAI answer synthesis on top of retrieved reviews

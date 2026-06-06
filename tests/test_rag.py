@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-
-import numpy as np
+from types import SimpleNamespace
 
 from src.rag.pipeline import (
     LLMConfig,
@@ -13,17 +12,42 @@ from src.rag.pipeline import (
 )
 
 
-class FakeEncoder:
-    def encode(self, texts, **kwargs):  # type: ignore[no-untyped-def]
-        del kwargs
-        embeddings = []
-        for text in texts:
-            lowered = text.casefold()
-            if "обнов" in lowered or "медлен" in lowered:
-                embeddings.append([1.0, 0.0])
-            else:
-                embeddings.append([0.0, 1.0])
-        return np.asarray(embeddings, dtype=np.float32)
+class FakeVectorStore:
+    def similarity_search_with_score(  # type: ignore[no-untyped-def]
+        self,
+        query,
+        *,
+        k,
+        filter=None,
+    ):
+        del query
+        documents = [
+            SimpleNamespace(
+                page_content="После обновления приложение тормозит и вылетает.",
+                metadata={
+                    "label_id": 0,
+                    "label": "negative",
+                    "split": "train",
+                },
+            ),
+            SimpleNamespace(
+                page_content="Интерфейс стал удобнее и работает быстро.",
+                metadata={
+                    "label_id": 2,
+                    "label": "positive",
+                    "split": "validation",
+                },
+            ),
+        ]
+        if filter is not None:
+            documents = [
+                document
+                for document in documents
+                if document.metadata["label"] == filter["label"]
+            ]
+        return [
+            (document, float(index)) for index, document in enumerate(documents[:k])
+        ]
 
 
 def test_infer_sentiment_focus_detects_negative_queries() -> None:
@@ -55,22 +79,7 @@ def test_review_rag_returns_most_relevant_contexts() -> None:
     rag = ReviewRAG(
         index_dir=Path("artifacts/rag"),
         embedding_model="fake-model",
-        encoder=FakeEncoder(),
-        records=[
-            {
-                "text": "После обновления приложение тормозит и вылетает.",
-                "label_id": 0,
-                "label": "negative",
-                "split": "train",
-            },
-            {
-                "text": "Интерфейс стал удобнее и работает быстро.",
-                "label_id": 2,
-                "label": "positive",
-                "split": "validation",
-            },
-        ],
-        embeddings=np.asarray([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+        vector_store=FakeVectorStore(),
     )
 
     response = rag.answer("Почему после обновления все стало медленнее?", top_k=1)

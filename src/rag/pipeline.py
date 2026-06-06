@@ -3,28 +3,22 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import httpx
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from src.data.dataset import (
-    DEFAULT_CACHE_DIR,
-    get_dataset,
-    maybe_sample_dataset,
-    prepare_text_classification_dataset,
-)
-from src.training import detect_device
-
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+DEFAULT_CACHE_DIR = Path("data/cache/ru_reviews")
 DEFAULT_RAG_DIR = Path("artifacts/rag")
 DEFAULT_TOP_K = 5
 DEFAULT_GENERATION_MODE = "auto"
 DEFAULT_LLM_TIMEOUT = 45.0
+DEFAULT_CHROMA_COLLECTION = "ru_reviews"
 RUSSIAN_STOPWORDS = {
     "это",
     "как",
@@ -138,13 +132,48 @@ class LLMConfig:
 def _resolve_device(device: str | None) -> str:
     if device is not None:
         return device
+    from src.training import detect_device
+
     return str(detect_device())
 
 
-def _load_encoder(model_name: str, device: str | None = None) -> Any:
-    from sentence_transformers import SentenceTransformer
+def _load_embeddings(model_name: str, device: str | None = None) -> Any:
+    from langchain_huggingface import HuggingFaceEmbeddings
 
-    return SentenceTransformer(model_name, device=_resolve_device(device))
+    return HuggingFaceEmbeddings(
+        model_name=model_name,
+        model_kwargs={"device": _resolve_device(device)},
+        encode_kwargs={"normalize_embeddings": True},
+    )
+
+
+def _load_chroma(
+    *,
+    index_dir: Path,
+    collection_name: str,
+    embeddings: Any,
+) -> Any:
+    from langchain_chroma import Chroma
+
+    return Chroma(
+        collection_name=collection_name,
+        embedding_function=embeddings,
+        persist_directory=str(index_dir),
+    )
+
+
+def _record_to_document(record: dict[str, Any], index: int) -> Any:
+    from langchain_core.documents import Document
+
+    return Document(
+        page_content=str(record["text"]),
+        metadata={
+            "label_id": int(record["label_id"]),
+            "label": str(record["label"]),
+            "split": str(record["split"]),
+            "row_id": index,
+        },
+    )
 
 
 def load_llm_config(mode: str | None = None) -> LLMConfig:
@@ -184,6 +213,8 @@ def resolve_generation_mode(
 
 
 def _build_records(dataset: Any) -> list[dict[str, Any]]:
+    from src.data.dataset import prepare_text_classification_dataset
+
     prepared = prepare_text_classification_dataset(dataset, keep_label_text=True)
     records: list[dict[str, Any]] = []
     for split_name, split in prepared.items():
@@ -374,45 +405,41 @@ def generate_llm_answer(
     if not is_llm_available(config):
         raise RuntimeError("LLM generation is not configured")
 
-    base_url = str(config.base_url).rstrip("/")
-    headers = {"Content-Type": "application/json"}
-    if config.api_key:
-        headers["Authorization"] = f"Bearer {config.api_key}"
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_openai import ChatOpenAI
 
-    payload = {
-        "model": config.model,
-        "temperature": 0.2,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                (
                     "You summarize user review corpora. Ground every answer in the "
                     "provided evidence and do not invent product facts."
                 ),
-            },
-            {
-                "role": "user",
-                "content": compose_llm_prompt(
-                    question,
-                    contexts,
-                    sentiment_focus,
-                    keyphrases,
-                    label_distribution,
-                ),
-            },
-        ],
-    }
-
-    response = httpx.post(
-        f"{base_url}/chat/completions",
-        headers=headers,
-        json=payload,
+            ),
+            ("user", "{question_prompt}"),
+        ]
+    )
+    llm = ChatOpenAI(
+        model=str(config.model),
+        api_key=config.api_key,
+        base_url=str(config.base_url).rstrip("/"),
+        temperature=0.2,
         timeout=config.timeout,
     )
-    response.raise_for_status()
-    data = response.json()
-    message = data["choices"][0]["message"]["content"]
-    return str(message).strip()
+    chain = prompt | llm
+    response = chain.invoke(
+        {
+            "question_prompt": compose_llm_prompt(
+                question,
+                contexts,
+                sentiment_focus,
+                keyphrases,
+                label_distribution,
+            )
+        }
+    )
+    return str(response.content).strip()
 
 
 def build_review_index(
@@ -424,27 +451,38 @@ def build_review_index(
     sample_size: int | None = None,
     device: str | None = None,
 ) -> Path:
+    from langchain_chroma import Chroma
+
+    from src.data.dataset import get_dataset, maybe_sample_dataset
+
     dataset = get_dataset(cache_dir=cache_dir)
     dataset = maybe_sample_dataset(dataset, sample_size)
     records = _build_records(dataset)
-    encoder = _load_encoder(model_name, device=device)
-    texts = [record["text"] for record in records]
-    embeddings = encoder.encode(
-        texts,
-        batch_size=batch_size,
-        convert_to_numpy=True,
-        normalize_embeddings=True,
-        show_progress_bar=True,
-    ).astype(np.float32)
+    documents = [
+        _record_to_document(record, index) for index, record in enumerate(records)
+    ]
+    embeddings = _load_embeddings(model_name, device=device)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    np.save(output_dir / "embeddings.npy", embeddings)
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True)
+    vector_store = Chroma(
+        collection_name=DEFAULT_CHROMA_COLLECTION,
+        embedding_function=embeddings,
+        persist_directory=str(output_dir),
+        collection_metadata={"hnsw:space": "cosine"},
+    )
+    chunk_size = max(1, batch_size)
+    for start in range(0, len(documents), chunk_size):
+        vector_store.add_documents(documents[start : start + chunk_size])
     _save_records(output_dir / "reviews.jsonl", records)
     metadata = {
+        "vector_store": "chroma",
+        "collection_name": DEFAULT_CHROMA_COLLECTION,
         "embedding_model": model_name,
         "size": len(records),
-        "embedding_dim": int(embeddings.shape[1]),
         "sample_size": sample_size,
+        "batch_size": batch_size,
     }
     (output_dir / "metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2),
@@ -458,26 +496,18 @@ class ReviewRAG:
         self,
         *,
         index_dir: Path,
-        records: list[dict[str, Any]],
-        embeddings: np.ndarray,
         embedding_model: str,
+        vector_store: Any,
+        collection_name: str = DEFAULT_CHROMA_COLLECTION,
         device: str | None = None,
-        encoder: Any | None = None,
         llm_config: LLMConfig | None = None,
     ) -> None:
         self.index_dir = index_dir
-        self.records = records
-        self.embeddings = embeddings.astype(np.float32)
         self.embedding_model = embedding_model
+        self.collection_name = collection_name
         self.device = device
-        self._encoder = encoder
+        self.vector_store = vector_store
         self.llm_config = llm_config or load_llm_config()
-
-    @property
-    def encoder(self) -> Any:
-        if self._encoder is None:
-            self._encoder = _load_encoder(self.embedding_model, device=self.device)
-        return self._encoder
 
     def search(
         self,
@@ -487,41 +517,33 @@ class ReviewRAG:
         sentiment_focus: str | None = None,
     ) -> list[RetrievedReview]:
         resolved_focus = sentiment_focus or infer_sentiment_focus(question)
-        candidate_indices = list(range(len(self.records)))
+        metadata_filter = None
         if resolved_focus is not None:
-            candidate_indices = [
-                index
-                for index, record in enumerate(self.records)
-                if str(record["label"]).casefold() == resolved_focus.casefold()
-            ]
-            if not candidate_indices:
-                candidate_indices = list(range(len(self.records)))
+            metadata_filter = {"label": resolved_focus.casefold()}
 
-        query_embedding = self.encoder.encode(
-            [question],
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-            show_progress_bar=False,
-        )[0].astype(np.float32)
-        candidate_matrix = self.embeddings[candidate_indices]
-        scores = candidate_matrix @ query_embedding
-
-        limit = min(top_k, len(candidate_indices))
-        best_local = np.argsort(scores)[::-1][:limit]
-        results: list[RetrievedReview] = []
-        for local_index in best_local:
-            record_index = candidate_indices[int(local_index)]
-            record = self.records[record_index]
-            results.append(
-                RetrievedReview(
-                    text=str(record["text"]),
-                    label_id=int(record["label_id"]),
-                    label=str(record["label"]),
-                    split=str(record["split"]),
-                    score=float(scores[int(local_index)]),
-                )
+        search_kwargs: dict[str, Any] = {"k": top_k}
+        if metadata_filter is not None:
+            search_kwargs["filter"] = metadata_filter
+        raw_results = self.vector_store.similarity_search_with_score(
+            question,
+            **search_kwargs,
+        )
+        if not raw_results and metadata_filter is not None:
+            raw_results = self.vector_store.similarity_search_with_score(
+                question,
+                k=top_k,
             )
-        return results
+
+        return [
+            RetrievedReview(
+                text=str(document.page_content),
+                label_id=int(document.metadata["label_id"]),
+                label=str(document.metadata["label"]),
+                split=str(document.metadata["split"]),
+                score=float(score),
+            )
+            for document, score in raw_results
+        ]
 
     def answer(
         self,
@@ -585,31 +607,35 @@ def load_review_rag(
     index_dir: Path = DEFAULT_RAG_DIR,
     *,
     device: str | None = None,
-    encoder: Any | None = None,
     llm_config: LLMConfig | None = None,
 ) -> ReviewRAG:
     metadata_path = index_dir / "metadata.json"
     reviews_path = index_dir / "reviews.jsonl"
-    embeddings_path = index_dir / "embeddings.npy"
+    chroma_path = index_dir / "chroma.sqlite3"
     if (
         not metadata_path.exists()
         or not reviews_path.exists()
-        or not embeddings_path.exists()
+        or not chroma_path.exists()
     ):
         raise FileNotFoundError(
             f"RAG index is incomplete or missing in directory: {index_dir}"
         )
 
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    records = _load_records(reviews_path)
-    embeddings = np.load(embeddings_path)
+    collection_name = str(metadata.get("collection_name", DEFAULT_CHROMA_COLLECTION))
+    embedding_model = str(metadata["embedding_model"])
+    embeddings = _load_embeddings(embedding_model, device=device)
+    vector_store = _load_chroma(
+        index_dir=index_dir,
+        collection_name=collection_name,
+        embeddings=embeddings,
+    )
     return ReviewRAG(
         index_dir=index_dir,
-        records=records,
-        embeddings=embeddings,
-        embedding_model=str(metadata["embedding_model"]),
+        embedding_model=embedding_model,
+        collection_name=collection_name,
+        vector_store=vector_store,
         device=device,
-        encoder=encoder,
         llm_config=llm_config,
     )
 

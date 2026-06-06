@@ -1,6 +1,10 @@
 datasets
 fastapi
-httpx
+chromadb
+langchain
+langchain-chroma
+langchain-huggingface
+langchain-openai
 numpy
 pandas
 pydantic
