@@ -92,6 +92,23 @@ def test_predict_endpoint_uses_loaded_predictor(tmp_path, monkeypatch) -> None:
     assert payload["scores"]["positive"] == 0.7
 
 
+def test_predict_endpoint_uses_baseline_artifact_by_default(monkeypatch) -> None:
+    api_module.get_predictor.cache_clear()
+    monkeypatch.setattr(
+        api_module,
+        "DEFAULT_MODEL_DIR",
+        api_module.Path("artifacts/baseline"),
+    )
+    client = TestClient(api_module.app)
+
+    response = client.post("/predict", json={"text": "Очень полезное приложение"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["label"] in {"negative", "neutral", "positive"}
+    assert set(payload["scores"]) == {"negative", "neutral", "positive"}
+
+
 def test_ask_endpoint_uses_loaded_rag_pipeline(tmp_path, monkeypatch) -> None:
     rag_dir = tmp_path / "rag"
     rag_dir.mkdir()

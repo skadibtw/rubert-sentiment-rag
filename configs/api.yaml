@@ -1,7 +1,7 @@
 host: 127.0.0.1
 port: 8000
 reload: false
-model_dir: artifacts/bert_custom
+model_dir: artifacts/baseline
 rag_index_dir: artifacts/rag
 rag_generation_mode: auto
 rag_llm_model:

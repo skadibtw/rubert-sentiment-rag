@@ -1,3 +1,3 @@
-from .predictor import SentimentPredictor, load_predictor
+from .predictor import SentimentPredictor, SklearnSentimentPredictor, load_predictor
 
-__all__ = ["SentimentPredictor", "load_predictor"]
+__all__ = ["SentimentPredictor", "SklearnSentimentPredictor", "load_predictor"]

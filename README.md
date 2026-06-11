@@ -288,7 +288,7 @@ Build and run:
 
 ```bash
 docker build -t nlp-pet-project .
-docker run --rm -p 8000:8000 -e MODEL_DIR=artifacts/bert_custom nlp-pet-project
+docker run --rm -p 8000:8000 -e MODEL_DIR=artifacts/baseline nlp-pet-project
 ```
 
 The container expects model files to be available inside the image or mounted at runtime.

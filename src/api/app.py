@@ -9,10 +9,10 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from src.api.demo_page import DEMO_PAGE_HTML
-from src.inference import SentimentPredictor, load_predictor
+from src.inference import SentimentPredictor, SklearnSentimentPredictor, load_predictor
 from src.rag import ReviewRAG, load_review_rag
 
-DEFAULT_MODEL_DIR = Path(os.getenv("MODEL_DIR", "artifacts/bert_custom"))
+DEFAULT_MODEL_DIR = Path(os.getenv("MODEL_DIR", "artifacts/baseline"))
 DEFAULT_RAG_INDEX_DIR = Path(os.getenv("RAG_INDEX_DIR", "artifacts/rag"))
 
 
@@ -64,7 +64,7 @@ app = FastAPI(
 
 
 @lru_cache(maxsize=1)
-def get_predictor() -> SentimentPredictor:
+def get_predictor() -> SentimentPredictor | SklearnSentimentPredictor:
     if not DEFAULT_MODEL_DIR.exists():
         raise FileNotFoundError(f"Model directory does not exist: {DEFAULT_MODEL_DIR}")
     return load_predictor(DEFAULT_MODEL_DIR)

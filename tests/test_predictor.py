@@ -3,8 +3,23 @@ from __future__ import annotations
 from pathlib import Path
 
 import torch
+from joblib import dump
 
-from src.inference.predictor import PredictorConfig, SentimentPredictor
+from src.inference.predictor import (
+    PredictorConfig,
+    SentimentPredictor,
+    load_predictor,
+)
+
+
+class FakeSklearnPipeline:
+    def predict(self, texts):  # type: ignore[no-untyped-def]
+        del texts
+        return [2]
+
+    def predict_proba(self, texts):  # type: ignore[no-untyped-def]
+        del texts
+        return [[0.1, 0.2, 0.7]]
 
 
 class FakeTokenizer:
@@ -44,3 +59,15 @@ def test_sentiment_predictor_returns_label_and_scores() -> None:
     assert prediction.label == "positive"
     assert set(prediction.scores) == {"negative", "neutral", "positive"}
     assert prediction.scores["positive"] > prediction.scores["neutral"]
+
+
+def test_load_predictor_supports_sklearn_baseline(tmp_path: Path) -> None:
+    dump(FakeSklearnPipeline(), tmp_path / "model.joblib")
+
+    predictor = load_predictor(tmp_path)
+    prediction = predictor.predict([" Отлично! "])[0]
+
+    assert prediction.text == " Отлично! "
+    assert prediction.label_id == 2
+    assert prediction.label == "positive"
+    assert prediction.scores["positive"] == 0.7

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch
+from joblib import load
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from src.data.dataset import clean_text
@@ -86,12 +87,64 @@ class SentimentPredictor:
         return results
 
 
+class SklearnSentimentPredictor:
+    def __init__(
+        self,
+        *,
+        pipeline: object,
+        id2label: dict[int, str] | None = None,
+    ) -> None:
+        self.pipeline = pipeline
+        self.id2label = id2label or {0: "negative", 1: "neutral", 2: "positive"}
+
+    def predict(self, texts: list[str]) -> list[SentimentPrediction]:
+        cleaned_texts = [clean_text(text) for text in texts]
+        predictions = self.pipeline.predict(cleaned_texts)
+        probabilities = self.pipeline.predict_proba(cleaned_texts)
+
+        results = []
+        for source_text, label_id, scores in zip(
+            texts,
+            predictions.tolist()
+            if hasattr(predictions, "tolist")
+            else list(predictions),
+            probabilities.tolist()
+            if hasattr(probabilities, "tolist")
+            else list(probabilities),
+            strict=False,
+        ):
+            label_id = int(label_id)
+            label_scores = {
+                self.id2label[index]: round(float(score), 6)
+                for index, score in enumerate(scores)
+            }
+            results.append(
+                SentimentPrediction(
+                    text=source_text,
+                    label_id=label_id,
+                    label=self.id2label[label_id],
+                    scores=label_scores,
+                )
+            )
+        return results
+
+
 def _load_metadata(model_dir: Path) -> dict[str, object]:
     metadata_path = model_dir / "model_metadata.json"
     return json.loads(metadata_path.read_text(encoding="utf-8"))
 
 
-def load_predictor(model_dir: Path) -> SentimentPredictor:
+def _load_sklearn_predictor(model_dir: Path) -> SklearnSentimentPredictor:
+    pipeline = load(model_dir / "model.joblib")
+    return SklearnSentimentPredictor(pipeline=pipeline)
+
+
+def load_predictor(model_dir: Path) -> SentimentPredictor | SklearnSentimentPredictor:
+    if (model_dir / "model.joblib").exists() and not (
+        model_dir / "model_metadata.json"
+    ).exists():
+        return _load_sklearn_predictor(model_dir)
+
     metadata = _load_metadata(model_dir)
     checkpoint_path = model_dir / metadata["checkpoint_path"]
     tokenizer_dir = model_dir / metadata["tokenizer_dir"]
