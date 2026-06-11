@@ -1,4 +1,4 @@
-cache_dir: data/cache/ru_reviews
+cache_dir: notebooks/data/cache/ru_reviews
 model_name: ai-forever/ruBERT-base
 max_length: 256
 epochs: 3

@@ -116,6 +116,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-size", type=int, default=None)
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts/bert"))
     parser.add_argument(
+        "--use-cpu",
+        action="store_true",
+        help="Force CPU training when the local GPU backend is unstable",
+    )
+    parser.add_argument(
         "--keep-label-text",
         action="store_true",
         help="Keep label_text after tokenization for debugging",
@@ -175,6 +180,7 @@ def main() -> None:
         save_total_limit=args.save_total_limit,
         seed=args.seed,
         report_to="none",
+        use_cpu=args.use_cpu,
     )
 
     callbacks = []

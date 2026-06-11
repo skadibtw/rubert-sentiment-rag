@@ -8,7 +8,7 @@ from pathlib import Path
 from datasets import DatasetDict, load_dataset, load_from_disk
 
 DATASET_NAME = "ai-forever/ru-reviews-classification"
-DEFAULT_CACHE_DIR = Path("data/cache/ru_reviews")
+DEFAULT_CACHE_DIR = Path("notebooks/data/cache/ru_reviews")
 SPACE_RE = re.compile(r"\s+")
 TAG_RE = re.compile(r"<[^>]+>")
 
