@@ -2,6 +2,7 @@ datasets
 accelerate
 fastapi<0.116
 chromadb
+joblib
 langchain
 langchain-chroma
 langchain-huggingface

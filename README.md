@@ -57,10 +57,10 @@ fine-tuning runs:
 |-------|----------|----------|-------|
 | `bert_trainer` | 0.7830 | 0.7848 | Previous full local run; best result so far |
 | `bert_custom` | 0.7760 | 0.7787 | Previous custom PyTorch loop run |
-| `baseline` | 0.7343 | 0.7355 | Unigram TF-IDF + LogisticRegression |
+| `baseline` | 0.7527 | 0.7544 | Word+char TF-IDF + LogisticRegression |
 
 The best full local ruBERT run improves over the classical TF-IDF baseline by
-roughly +4.9 macro F1 points.
+roughly +3.0 macro F1 points.
 
 The project also saves:
 
@@ -68,6 +68,7 @@ The project also saves:
 - `classification_report.txt`
 - `confusion_matrix.csv`
 - `errors.csv`
+- `model.joblib` for the scikit-learn baseline
 
 for each trained model under `artifacts/`.
 
