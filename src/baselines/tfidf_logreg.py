@@ -35,9 +35,9 @@ class BaselineConfig:
     cache_dir: Path = DEFAULT_CACHE_DIR
     text_column: str = "text"
     label_column: str = "label"
-    max_features: int = 50000
-    ngram_max: int = 2
-    min_df: int = 3
+    max_features: int = 20000
+    ngram_max: int = 1
+    min_df: int = 5
     max_iter: int = 1000
     random_state: int = 42
     sample_size: int | None = None

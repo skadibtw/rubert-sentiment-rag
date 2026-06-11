@@ -50,13 +50,17 @@ nlp_pet_project/
 
 ## Results
 
-Current local runs cover the baseline and both transformer variants:
+Current local runs cover the classical baseline and previous full ruBERT
+fine-tuning runs:
 
 | Model | Accuracy | Macro F1 | Notes |
 |-------|----------|----------|-------|
-| `bert_trainer` | 0.7830 | 0.7848 | Best result so far |
-| `bert_custom` | 0.7760 | 0.7787 | Custom PyTorch loop |
-| `baseline` | 0.7452 | 0.7468 | TF-IDF + LogisticRegression |
+| `bert_trainer` | 0.7830 | 0.7848 | Previous full local run; best result so far |
+| `bert_custom` | 0.7760 | 0.7787 | Previous custom PyTorch loop run |
+| `baseline` | 0.7343 | 0.7355 | Unigram TF-IDF + LogisticRegression |
+
+The best full local ruBERT run improves over the classical TF-IDF baseline by
+roughly +4.9 macro F1 points.
 
 The project also saves:
 
@@ -73,12 +77,15 @@ for each trained model under `artifacts/`.
 
 ```bash
 uv venv .venv
-.venv\Scripts\activate
+source .venv/bin/activate
 uv pip install -r requirements-dev.txt
 ```
 
 If you already have a working virtual environment, reuse it.
 If you are on ROCm or another custom PyTorch build, install `torch` your own way first and then install the rest of the dependencies.
+For this project, keep `transformers<5`; ROCm sanity runs with `torch==2.12.0+rocm7.2`
+on the local RX 9070-class GPU produced NaN losses during fine-tuning, while the
+same 1k-sample sanity run on CPU completed normally.
 
 ### 2. Prepare dataset cache
 
@@ -97,6 +104,12 @@ python -m scripts.train_baseline
 ```bash
 python -m scripts.train_bert
 python -m scripts.train_bert_custom
+```
+
+For a slow but stable CPU sanity check of the Hugging Face Trainer pipeline:
+
+```bash
+python -m scripts.train_bert --config configs/train_bert_cpu_sanity.yaml
 ```
 
 ### 5. Compare all saved runs
@@ -137,6 +150,7 @@ All main entrypoints read YAML configs from `configs/`.
 
 - `configs/train_baseline.yaml`
 - `configs/train_bert.yaml`
+- `configs/train_bert_cpu_sanity.yaml`
 - `configs/train_bert_custom.yaml`
 - `configs/compare_models.yaml`
 - `configs/build_rag_index.yaml`
