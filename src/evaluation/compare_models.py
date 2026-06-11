@@ -46,6 +46,12 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MODEL_DIRS["bert_custom"],
         help="Artifacts directory for the custom PyTorch training loop",
     )
+    parser.add_argument(
+        "--fallback-metrics-path",
+        type=Path,
+        default=None,
+        help="Optional JSON file with previous-run metrics for missing artifacts",
+    )
     return parser.parse_args()
 
 
@@ -64,29 +70,69 @@ def _extract_label_f1(metrics: dict[str, object], label: str) -> float | None:
     return float(f1_score) if f1_score is not None else None
 
 
+def _load_fallback_metrics(path: Path | None) -> dict[str, dict[str, object]]:
+    if path is None or not path.exists():
+        return {}
+    raw_metrics = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw_metrics, dict):
+        msg = "Fallback metrics file must contain a JSON object keyed by model name"
+        raise ValueError(msg)
+    fallback_metrics: dict[str, dict[str, object]] = {}
+    for model_name, metrics in raw_metrics.items():
+        if not isinstance(metrics, dict):
+            msg = f"Fallback metrics for {model_name} must be a JSON object"
+            raise ValueError(msg)
+        fallback_metrics[str(model_name)] = metrics
+    return fallback_metrics
+
+
+def _row_from_metrics(
+    model_name: str,
+    model_dir: Path,
+    metrics: dict[str, object],
+    *,
+    source: str,
+) -> dict[str, object]:
+    return {
+        "model": model_name,
+        "artifacts_dir": str(model_dir),
+        "source": source,
+        "accuracy": float(metrics["accuracy"]),
+        "f1_macro": float(metrics["f1_macro"]),
+        "f1_negative": _extract_label_f1(metrics, "0"),
+        "f1_neutral": _extract_label_f1(metrics, "1"),
+        "f1_positive": _extract_label_f1(metrics, "2"),
+    }
+
+
 def _collect_rows(
     model_dirs: dict[str, Path],
+    fallback_metrics: dict[str, dict[str, object]] | None = None,
 ) -> tuple[list[dict[str, object]], list[str]]:
     rows: list[dict[str, object]] = []
     missing_models: list[str] = []
+    fallback_metrics = fallback_metrics or {}
 
     for model_name, model_dir in model_dirs.items():
         metrics_path = model_dir / "metrics.json"
         if not metrics_path.exists():
-            missing_models.append(model_name)
+            metrics = fallback_metrics.get(model_name)
+            if metrics is None:
+                missing_models.append(model_name)
+                continue
+            rows.append(
+                _row_from_metrics(
+                    model_name,
+                    model_dir,
+                    metrics,
+                    source=str(metrics.get("source", "fallback")),
+                )
+            )
             continue
 
         metrics = _load_metrics(metrics_path)
         rows.append(
-            {
-                "model": model_name,
-                "artifacts_dir": str(model_dir),
-                "accuracy": float(metrics["accuracy"]),
-                "f1_macro": float(metrics["f1_macro"]),
-                "f1_negative": _extract_label_f1(metrics, "0"),
-                "f1_neutral": _extract_label_f1(metrics, "1"),
-                "f1_positive": _extract_label_f1(metrics, "2"),
-            }
+            _row_from_metrics(model_name, model_dir, metrics, source="artifact")
         )
 
     rows.sort(key=lambda row: row["f1_macro"], reverse=True)
@@ -130,7 +176,8 @@ def main() -> None:
         "bert_trainer": args.bert_dir,
         "bert_custom": args.custom_dir,
     }
-    rows, missing_models = _collect_rows(model_dirs)
+    fallback_metrics = _load_fallback_metrics(args.fallback_metrics_path)
+    rows, missing_models = _collect_rows(model_dirs, fallback_metrics)
 
     if not rows:
         raise FileNotFoundError(
