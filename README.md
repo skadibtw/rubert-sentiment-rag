@@ -54,9 +54,13 @@ fine-tuning runs:
 
 | Model | Accuracy | Macro F1 | Notes |
 |-------|----------|----------|-------|
+| `baseline_binary` | 0.9404 | 0.9404 | Binary negative-vs-positive word+char TF-IDF + LogisticRegression |
 | `bert_trainer` | 0.7830 | 0.7848 | Previous full local run; best result so far |
 | `bert_custom` | 0.7760 | 0.7787 | Previous custom PyTorch loop run |
 | `baseline` | 0.7527 | 0.7544 | Word+char TF-IDF + LogisticRegression |
+
+`baseline_binary` is a separate polarity benchmark that drops neutral reviews
+and evaluates only negative-vs-positive classification.
 
 The best full local ruBERT run improves over the classical TF-IDF baseline by
 roughly +3.0 macro F1 points.
@@ -83,10 +87,8 @@ uv pip install -r requirements-dev.txt
 ```
 
 If you already have a working virtual environment, reuse it.
-If you are on ROCm or another custom PyTorch build, install `torch` your own way first and then install the rest of the dependencies.
-For this project, keep `transformers<5`; ROCm sanity runs with `torch==2.12.0+rocm7.2`
-on the local RX 9070-class GPU produced NaN losses during fine-tuning, while the
-same 1k-sample sanity run on CPU completed normally.
+If you need a custom PyTorch build, install `torch` your own way first and then install the rest of the dependencies.
+For this project, keep `transformers<5`.
 
 ### 2. Prepare dataset cache
 
@@ -98,6 +100,7 @@ python -m src.data.dataset
 
 ```bash
 python -m scripts.train_baseline
+python -m scripts.train_binary_baseline
 ```
 
 ### 4. Train models
@@ -168,6 +171,7 @@ Open:
 All main entrypoints read YAML configs from `configs/`.
 
 - `configs/train_baseline.yaml`
+- `configs/train_binary_baseline.yaml`
 - `configs/train_bert.yaml`
 - `configs/train_bert_cpu_sanity.yaml`
 - `configs/train_bert_custom.yaml`

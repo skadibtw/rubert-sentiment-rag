@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +29,8 @@ from src.evaluation.metrics import (
 )
 from src.experiments import MLflowRunConfig, log_run
 
-ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
+MULTICLASS_ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
+BINARY_POLARITY_ID2LABEL = {0: "negative", 1: "positive"}
 
 
 @dataclass(slots=True)
@@ -37,6 +39,7 @@ class BaselineConfig:
     cache_dir: Path = DEFAULT_CACHE_DIR
     text_column: str = "text"
     label_column: str = "label"
+    label_mode: str = "multiclass"
     feature_mode: str = "word_char"
     max_features: int = 100000
     ngram_max: int = 2
@@ -56,11 +59,33 @@ class BaselineConfig:
 
 
 def dataset_to_xy(
-    split: Dataset, text_column: str, label_column: str
+    split: Dataset, text_column: str, label_column: str, label_mode: str
 ) -> tuple[list[str], list[int]]:
-    texts = [clean_text(text) for text in split[text_column]]
-    labels = [int(label) for label in split[label_column]]
+    texts = []
+    labels = []
+    for text, label in zip(split[text_column], split[label_column], strict=False):
+        label = int(label)
+        if label_mode == "multiclass":
+            mapped_label = label
+        elif label_mode == "binary_polarity":
+            if label == 1:
+                continue
+            mapped_label = 1 if label == 2 else 0
+        else:
+            msg = "label_mode must be one of: multiclass, binary_polarity"
+            raise ValueError(msg)
+        texts.append(clean_text(text))
+        labels.append(mapped_label)
     return texts, labels
+
+
+def id2label_for_mode(label_mode: str) -> dict[int, str]:
+    if label_mode == "multiclass":
+        return MULTICLASS_ID2LABEL
+    if label_mode == "binary_polarity":
+        return BINARY_POLARITY_ID2LABEL
+    msg = "label_mode must be one of: multiclass, binary_polarity"
+    raise ValueError(msg)
 
 
 def build_vectorizer(config: BaselineConfig) -> TfidfVectorizer | FeatureUnion:
@@ -119,12 +144,14 @@ def run_baseline(config: BaselineConfig) -> dict[str, object]:
     test_split = dataset["test"]
 
     x_train, y_train = dataset_to_xy(
-        train_split, config.text_column, config.label_column
+        train_split, config.text_column, config.label_column, config.label_mode
     )
     x_validation, y_validation = dataset_to_xy(
-        validation_split, config.text_column, config.label_column
+        validation_split, config.text_column, config.label_column, config.label_mode
     )
-    x_test, y_test = dataset_to_xy(test_split, config.text_column, config.label_column)
+    x_test, y_test = dataset_to_xy(
+        test_split, config.text_column, config.label_column, config.label_mode
+    )
 
     pipeline = build_pipeline(config)
     pipeline.fit(x_train, y_train)
@@ -135,16 +162,17 @@ def run_baseline(config: BaselineConfig) -> dict[str, object]:
         y_validation, validation_predictions.tolist()
     )
     test_metrics = classification_metrics(y_test, test_predictions.tolist())
+    id2label = id2label_for_mode(config.label_mode)
     confusion = confusion_matrix_frame(
         y_test,
         test_predictions.tolist(),
-        labels=[ID2LABEL[index] for index in sorted(ID2LABEL)],
+        labels=[id2label[index] for index in sorted(id2label)],
     )
     errors = build_error_table(
         x_test,
         y_test,
         test_predictions.tolist(),
-        id2label=ID2LABEL,
+        id2label=id2label,
     )
     save_evaluation_artifacts(
         config.output_dir,
@@ -153,6 +181,18 @@ def run_baseline(config: BaselineConfig) -> dict[str, object]:
         errors=errors,
     )
     dump(pipeline, config.output_dir / "model.joblib")
+    (config.output_dir / "sklearn_metadata.json").write_text(
+        json.dumps(
+            {
+                "model_family": "tfidf_logreg",
+                "label_mode": config.label_mode,
+                "id2label": id2label,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     log_run(
         MLflowRunConfig(
             enabled=config.track_mlflow,
@@ -164,6 +204,7 @@ def run_baseline(config: BaselineConfig) -> dict[str, object]:
             "model_family": "tfidf_logreg",
             "dataset_name": config.dataset_name,
             "sample_size": config.sample_size,
+            "label_mode": config.label_mode,
             "feature_mode": config.feature_mode,
             "max_features": config.max_features,
             "ngram_max": config.ngram_max,
@@ -204,6 +245,11 @@ def parse_args() -> argparse.Namespace:
         "--sample-size", type=int, default=None, help="Optional cap per split"
     )
     parser.add_argument(
+        "--label-mode",
+        choices=["multiclass", "binary_polarity"],
+        default=defaults.label_mode,
+    )
+    parser.add_argument(
         "--feature-mode",
         choices=["word", "word_char"],
         default=defaults.feature_mode,
@@ -237,6 +283,7 @@ def main() -> None:
     config = BaselineConfig(
         cache_dir=args.cache_dir,
         sample_size=args.sample_size,
+        label_mode=args.label_mode,
         feature_mode=args.feature_mode,
         max_features=args.max_features,
         ngram_max=args.ngram_max,

@@ -136,13 +136,16 @@ def _load_metadata(model_dir: Path) -> dict[str, object]:
 
 def _load_sklearn_predictor(model_dir: Path) -> SklearnSentimentPredictor:
     pipeline = load(model_dir / "model.joblib")
-    return SklearnSentimentPredictor(pipeline=pipeline)
+    metadata_path = model_dir / "sklearn_metadata.json"
+    id2label = None
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        id2label = {int(key): value for key, value in metadata["id2label"].items()}
+    return SklearnSentimentPredictor(pipeline=pipeline, id2label=id2label)
 
 
 def load_predictor(model_dir: Path) -> SentimentPredictor | SklearnSentimentPredictor:
-    if (model_dir / "model.joblib").exists() and not (
-        model_dir / "model_metadata.json"
-    ).exists():
+    if (model_dir / "model.joblib").exists():
         return _load_sklearn_predictor(model_dir)
 
     metadata = _load_metadata(model_dir)
