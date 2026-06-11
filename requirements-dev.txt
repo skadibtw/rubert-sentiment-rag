@@ -1,4 +1,5 @@
 -r requirements-base.txt
-httpx
+anyio<4
+httpx<0.28
 pytest
 ruff

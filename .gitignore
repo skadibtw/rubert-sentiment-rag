@@ -1,5 +1,9 @@
 PROJECT_PLAN.md
 .venv/
+.venv-rocm/
+.tmp/
+.uv-cache-rocm/
+.hf-cache/
 __pycache__/
 *.pyc
 *.pyo
@@ -11,6 +15,7 @@ __pycache__/
 .idea/
 .vscode/
 data/cache/
+notebooks/data/cache/**/cache-*.arrow
 artifacts/
 .ipynb_checkpoints/
 .pytest_cache/

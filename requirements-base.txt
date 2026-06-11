@@ -1,5 +1,6 @@
 datasets
-fastapi
+accelerate
+fastapi<0.116
 chromadb
 langchain
 langchain-chroma
@@ -12,5 +13,5 @@ pyyaml
 scikit-learn
 sentence-transformers
 tqdm
-transformers
+transformers<5
 uvicorn
