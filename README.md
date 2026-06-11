@@ -121,6 +121,9 @@ python -m scripts.train_bert --config configs/train_bert_cpu_sanity.yaml
 python -m scripts.compare_models
 ```
 
+The comparison uses fresh `metrics.json` artifacts when available and falls back
+to explicitly configured previous-run metrics from `configs/previous_model_metrics.json`.
+
 Export README-ready plots from saved metrics:
 
 ```bash
@@ -171,6 +174,7 @@ All main entrypoints read YAML configs from `configs/`.
 - `configs/train_bert_cpu_sanity.yaml`
 - `configs/train_bert_custom.yaml`
 - `configs/compare_models.yaml`
+- `configs/previous_model_metrics.json`
 - `configs/export_eval_plots.yaml`
 - `configs/build_rag_index.yaml`
 - `configs/rag_demo.yaml`
