@@ -13,6 +13,7 @@ if __package__ is None or __package__ == "":
 
 DEFAULT_MODEL_DIRS = {
     "baseline": Path("artifacts/baseline"),
+    "baseline_binary": Path("artifacts/baseline_binary"),
     "bert_trainer": Path("artifacts/bert"),
     "bert_custom": Path("artifacts/bert_custom"),
 }
@@ -39,6 +40,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_MODEL_DIRS["bert_trainer"],
         help="Artifacts directory for the Hugging Face Trainer model",
+    )
+    parser.add_argument(
+        "--baseline-binary-dir",
+        type=Path,
+        default=DEFAULT_MODEL_DIRS["baseline_binary"],
+        help="Artifacts directory for the binary polarity baseline model",
     )
     parser.add_argument(
         "--custom-dir",
@@ -70,6 +77,16 @@ def _extract_label_f1(metrics: dict[str, object], label: str) -> float | None:
     return float(f1_score) if f1_score is not None else None
 
 
+def _load_artifact_task(model_dir: Path, metrics: dict[str, object]) -> str:
+    if "task" in metrics:
+        return str(metrics["task"])
+    metadata_path = model_dir / "sklearn_metadata.json"
+    if metadata_path.exists():
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        return str(metadata.get("label_mode", "multiclass"))
+    return "multiclass"
+
+
 def _load_fallback_metrics(path: Path | None) -> dict[str, dict[str, object]]:
     if path is None or not path.exists():
         return {}
@@ -92,16 +109,21 @@ def _row_from_metrics(
     metrics: dict[str, object],
     *,
     source: str,
+    task: str,
 ) -> dict[str, object]:
+    positive_label = "1" if task == "binary_polarity" else "2"
     return {
         "model": model_name,
         "artifacts_dir": str(model_dir),
+        "task": task,
         "source": source,
         "accuracy": float(metrics["accuracy"]),
         "f1_macro": float(metrics["f1_macro"]),
         "f1_negative": _extract_label_f1(metrics, "0"),
-        "f1_neutral": _extract_label_f1(metrics, "1"),
-        "f1_positive": _extract_label_f1(metrics, "2"),
+        "f1_neutral": None
+        if task == "binary_polarity"
+        else _extract_label_f1(metrics, "1"),
+        "f1_positive": _extract_label_f1(metrics, positive_label),
     }
 
 
@@ -126,13 +148,21 @@ def _collect_rows(
                     model_dir,
                     metrics,
                     source=str(metrics.get("source", "fallback")),
+                    task=str(metrics.get("task", "multiclass")),
                 )
             )
             continue
 
         metrics = _load_metrics(metrics_path)
+        task = _load_artifact_task(model_dir, metrics)
         rows.append(
-            _row_from_metrics(model_name, model_dir, metrics, source="artifact")
+            _row_from_metrics(
+                model_name,
+                model_dir,
+                metrics,
+                source="artifact",
+                task=task,
+            )
         )
 
     rows.sort(key=lambda row: row["f1_macro"], reverse=True)
@@ -161,9 +191,17 @@ def _build_summary(
 ) -> dict[str, object]:
     best_model = rows[0]["model"] if rows else None
     best_f1 = rows[0]["f1_macro"] if rows else None
+    best_by_task = {}
+    for task, task_rows in pd.DataFrame(rows).groupby("task"):
+        best_row = task_rows.sort_values("f1_macro", ascending=False).iloc[0]
+        best_by_task[str(task)] = {
+            "best_model": best_row["model"],
+            "best_f1_macro": float(best_row["f1_macro"]),
+        }
     return {
         "best_model": best_model,
         "best_f1_macro": best_f1,
+        "best_by_task": best_by_task,
         "compared_models": [row["model"] for row in rows],
         "missing_models": missing_models,
     }
@@ -173,6 +211,7 @@ def main() -> None:
     args = parse_args()
     model_dirs = {
         "baseline": args.baseline_dir,
+        "baseline_binary": args.baseline_binary_dir,
         "bert_trainer": args.bert_dir,
         "bert_custom": args.custom_dir,
     }
@@ -209,6 +248,12 @@ def main() -> None:
             f"{summary['best_model']} ({summary['best_f1_macro']:.4f})"
         ),
     ]
+    for task, task_summary in summary["best_by_task"].items():
+        report_lines.append(
+            "Best "
+            f"{task} model by macro F1: "
+            f"{task_summary['best_model']} ({task_summary['best_f1_macro']:.4f})"
+        )
     if missing_models:
         report_lines.append(f"Missing artifacts: {', '.join(missing_models)}")
     report_text = "\n".join(report_lines)

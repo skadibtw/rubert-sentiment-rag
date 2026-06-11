@@ -1,5 +1,6 @@
 output_dir: artifacts/comparison
 baseline_dir: artifacts/baseline
+baseline_binary_dir: artifacts/baseline_binary
 bert_dir: artifacts/bert
 custom_dir: artifacts/bert_custom
 fallback_metrics_path: configs/previous_model_metrics.json

@@ -1,10 +1,12 @@
 {
   "bert_trainer": {
+    "task": "multiclass",
     "source": "previous_full_local_run",
     "accuracy": 0.7830,
     "f1_macro": 0.7848
   },
   "bert_custom": {
+    "task": "multiclass",
     "source": "previous_custom_loop_run",
     "accuracy": 0.7760,
     "f1_macro": 0.7787

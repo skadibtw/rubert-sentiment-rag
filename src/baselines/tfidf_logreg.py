@@ -163,6 +163,7 @@ def run_baseline(config: BaselineConfig) -> dict[str, object]:
     )
     test_metrics = classification_metrics(y_test, test_predictions.tolist())
     id2label = id2label_for_mode(config.label_mode)
+    test_metrics["task"] = config.label_mode
     confusion = confusion_matrix_frame(
         y_test,
         test_predictions.tolist(),
