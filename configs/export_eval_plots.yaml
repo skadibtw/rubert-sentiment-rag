@@ -1,0 +1,3 @@
+baseline_confusion_csv: artifacts/baseline/confusion_matrix.csv
+comparison_csv: artifacts/comparison/model_comparison.csv
+output_dir: artifacts/figures

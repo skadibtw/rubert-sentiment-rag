@@ -70,6 +70,7 @@ The project also saves:
 - `confusion_matrix.csv`
 - `errors.csv`
 - `model.joblib` for the scikit-learn baseline
+- PNG plots under `artifacts/figures/`
 
 for each trained model under `artifacts/`.
 
@@ -120,6 +121,12 @@ python -m scripts.train_bert --config configs/train_bert_cpu_sanity.yaml
 python -m scripts.compare_models
 ```
 
+Export README-ready plots from saved metrics:
+
+```bash
+python -m scripts.export_eval_plots
+```
+
 To log training params, metrics, and local artifacts to MLflow, set
 `track_mlflow: true` and a local SQLite or remote `mlflow_tracking_uri` in the
 training config. For example:
@@ -164,6 +171,7 @@ All main entrypoints read YAML configs from `configs/`.
 - `configs/train_bert_cpu_sanity.yaml`
 - `configs/train_bert_custom.yaml`
 - `configs/compare_models.yaml`
+- `configs/export_eval_plots.yaml`
 - `configs/build_rag_index.yaml`
 - `configs/rag_demo.yaml`
 - `configs/api.yaml`
@@ -293,4 +301,3 @@ The container expects model files to be available inside the image or mounted at
 ## Next ideas
 
 - add a LangChain retrieval chain with streaming answer generation
-- export plots for confusion matrix and learning curves in README

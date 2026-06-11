@@ -7,6 +7,7 @@ langchain
 langchain-chroma
 langchain-huggingface
 langchain-openai
+matplotlib
 mlflow
 numpy
 pandas
