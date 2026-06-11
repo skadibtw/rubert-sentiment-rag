@@ -26,8 +26,13 @@ def test_plot_model_comparison_writes_png(tmp_path: Path) -> None:
     comparison_csv = tmp_path / "comparison.csv"
     pd.DataFrame(
         [
-            {"model": "baseline", "f1_macro": 0.75},
-            {"model": "bert", "f1_macro": 0.79},
+            {"model": "baseline", "task": "multiclass", "f1_macro": 0.75},
+            {"model": "bert", "task": "multiclass", "f1_macro": 0.79},
+            {
+                "model": "baseline_binary",
+                "task": "binary_polarity",
+                "f1_macro": 0.94,
+            },
         ]
     ).to_csv(comparison_csv, index=False)
     output_path = tmp_path / "comparison.png"

@@ -70,11 +70,25 @@ def plot_model_comparison(
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plot_frame = frame.sort_values(metric_column, ascending=True)
+    if "task" in plot_frame.columns:
+        y_labels = plot_frame.apply(
+            lambda row: f"{row['model']} ({row['task']})",
+            axis=1,
+        )
+        colors = plot_frame["task"].map(
+            {
+                "binary_polarity": "#1b7f5f",
+                "multiclass": "#2f6f8f",
+            }
+        ).fillna("#5f6b7a")
+    else:
+        y_labels = plot_frame["model"]
+        colors = "#2f6f8f"
 
     import matplotlib.pyplot as plt
 
     fig, ax = plt.subplots(figsize=(8, 4.8))
-    bars = ax.barh(plot_frame["model"], plot_frame[metric_column], color="#2f6f8f")
+    bars = ax.barh(y_labels, plot_frame[metric_column], color=colors)
     ax.set_title(title)
     ax.set_xlabel(metric_column)
     ax.set_xlim(0, 1)
