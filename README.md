@@ -5,8 +5,6 @@ The repository includes dataset preparation, a TF-IDF baseline, two ruBERT train
 evaluation artifacts, inference utilities, a LangChain + ChromaDB RAG layer over the review corpus,
 a FastAPI service, and a browser demo.
 
-See `CHANGELOG.md` for a short project evolution log from baseline experiments to retrieval QA.
-
 ## Why this project exists
 
 This project is built to show practical ML engineering skills, not just model fine-tuning in a notebook:
