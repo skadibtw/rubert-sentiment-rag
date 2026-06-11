@@ -36,6 +36,7 @@ from src.evaluation.metrics import (
     confusion_matrix_frame,
     save_evaluation_artifacts,
 )
+from src.experiments import MLflowRunConfig, log_run
 
 MODEL_NAME = "ai-forever/ruBERT-base"
 ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
@@ -120,6 +121,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Force CPU training when the local GPU backend is unstable",
     )
+    parser.add_argument("--track-mlflow", action="store_true")
+    parser.add_argument("--mlflow-experiment", default="rubert-sentiment-rag")
+    parser.add_argument("--mlflow-run-name", default="rubert-trainer")
+    parser.add_argument("--mlflow-tracking-uri", default=None)
     parser.add_argument(
         "--keep-label-text",
         action="store_true",
@@ -223,6 +228,39 @@ def main() -> None:
         metrics=report_metrics,
         confusion=confusion,
         errors=errors,
+    )
+    log_run(
+        MLflowRunConfig(
+            enabled=args.track_mlflow,
+            experiment_name=args.mlflow_experiment,
+            run_name=args.mlflow_run_name,
+            tracking_uri=args.mlflow_tracking_uri,
+        ),
+        params={
+            "model_family": "rubert_trainer",
+            "dataset_name": "ai-forever/ru-reviews-classification",
+            "model_name": args.model_name,
+            "max_length": args.max_length,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "learning_rate": args.learning_rate,
+            "weight_decay": args.weight_decay,
+            "warmup_ratio": args.warmup_ratio,
+            "gradient_accumulation_steps": args.gradient_accumulation_steps,
+            "seed": args.seed,
+            "sample_size": args.sample_size,
+            "use_cpu": args.use_cpu,
+        },
+        metrics={
+            "test_accuracy": report_metrics["accuracy"],
+            "test_f1_macro": report_metrics["f1_macro"],
+            **{
+                key.removeprefix("eval_"): value
+                for key, value in metrics.items()
+                if isinstance(value, int | float)
+            },
+        },
+        artifacts_dir=args.output_dir,
     )
 
     print(json.dumps(metrics, ensure_ascii=False, indent=2, default=str))

@@ -25,6 +25,7 @@ from src.evaluation.metrics import (
     confusion_matrix_frame,
     save_evaluation_artifacts,
 )
+from src.experiments import MLflowRunConfig, log_run
 from src.models import BertSentimentClassifier
 from src.training import (
     TrainerConfig,
@@ -94,6 +95,10 @@ def parse_args() -> argparse.Namespace:
         "--output-dir", type=Path, default=Path("artifacts/bert_custom")
     )
     parser.add_argument("--dropout", type=float, default=0.1)
+    parser.add_argument("--track-mlflow", action="store_true")
+    parser.add_argument("--mlflow-experiment", default="rubert-sentiment-rag")
+    parser.add_argument("--mlflow-run-name", default="rubert-custom-loop")
+    parser.add_argument("--mlflow-tracking-uri", default=None)
     parser.add_argument("--keep-label-text", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -194,6 +199,37 @@ def main() -> None:
     (args.output_dir / "model_metadata.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2),
         encoding="utf-8",
+    )
+    best_validation = max(history, key=lambda item: item["val_f1_macro"])
+    log_run(
+        MLflowRunConfig(
+            enabled=args.track_mlflow,
+            experiment_name=args.mlflow_experiment,
+            run_name=args.mlflow_run_name,
+            tracking_uri=args.mlflow_tracking_uri,
+        ),
+        params={
+            "model_family": "rubert_custom_loop",
+            "model_name": args.model_name,
+            "max_length": args.max_length,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "learning_rate": args.learning_rate,
+            "weight_decay": args.weight_decay,
+            "warmup_ratio": args.warmup_ratio,
+            "max_grad_norm": args.max_grad_norm,
+            "sample_size": args.sample_size,
+            "num_workers": args.num_workers,
+            "dropout": args.dropout,
+            "device": str(device),
+        },
+        metrics={
+            "validation_accuracy": best_validation["val_accuracy"],
+            "validation_f1_macro": best_validation["val_f1_macro"],
+            "test_accuracy": report_metrics["accuracy"],
+            "test_f1_macro": report_metrics["f1_macro"],
+        },
+        artifacts_dir=args.output_dir,
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     print(f"Saved evaluation artifacts to: {args.output_dir}")

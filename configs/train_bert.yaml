@@ -13,5 +13,9 @@ early_stopping_patience: 1
 sample_size:
 output_dir: artifacts/bert
 use_cpu: false
+track_mlflow: false
+mlflow_experiment: rubert-sentiment-rag
+mlflow_run_name: rubert-trainer
+mlflow_tracking_uri:
 keep_label_text: false
 dry_run: false

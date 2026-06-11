@@ -4,6 +4,8 @@ PROJECT_PLAN.md
 .tmp/
 .uv-cache-rocm/
 .hf-cache/
+mlruns/
+mlflow.db*
 __pycache__/
 *.pyc
 *.pyo

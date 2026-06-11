@@ -16,13 +16,14 @@ This project is built to show practical ML engineering skills, not just model fi
 - custom PyTorch training loop alongside Hugging Face Trainer
 - repeatable evaluation with saved reports and error analysis
 - inference packaging for API usage
+- optional MLflow experiment tracking
 - retrieval-augmented question answering over real review texts
 - project ergonomics: configs, tests, Docker, and CI
 
 ## Stack
 
 - Python, PyTorch, Hugging Face Transformers, Datasets
-- LangChain, ChromaDB, sentence-transformers, scikit-learn, pandas, FastAPI, Uvicorn
+- LangChain, ChromaDB, sentence-transformers, scikit-learn, MLflow, pandas, FastAPI, Uvicorn
 - pytest, Ruff, GitHub Actions
 
 ## Repository layout
@@ -117,6 +118,15 @@ python -m scripts.train_bert --config configs/train_bert_cpu_sanity.yaml
 
 ```bash
 python -m scripts.compare_models
+```
+
+To log training params, metrics, and local artifacts to MLflow, set
+`track_mlflow: true` and a local SQLite or remote `mlflow_tracking_uri` in the
+training config. For example:
+
+```yaml
+track_mlflow: true
+mlflow_tracking_uri: sqlite:///mlflow.db
 ```
 
 ### 6. Build the LangChain + ChromaDB RAG index
@@ -284,4 +294,3 @@ The container expects model files to be available inside the image or mounted at
 
 - add a LangChain retrieval chain with streaming answer generation
 - export plots for confusion matrix and learning curves in README
-- add experiment tracking with W&B or MLflow

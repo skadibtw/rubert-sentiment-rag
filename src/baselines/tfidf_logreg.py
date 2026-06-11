@@ -26,6 +26,7 @@ from src.evaluation.metrics import (
     confusion_matrix_frame,
     save_evaluation_artifacts,
 )
+from src.experiments import MLflowRunConfig, log_run
 
 ID2LABEL = {0: "negative", 1: "neutral", 2: "positive"}
 
@@ -48,6 +49,10 @@ class BaselineConfig:
     random_state: int = 42
     sample_size: int | None = None
     output_dir: Path = Path("artifacts/baseline")
+    track_mlflow: bool = False
+    mlflow_experiment: str = "rubert-sentiment-rag"
+    mlflow_run_name: str | None = "tfidf-logreg-baseline"
+    mlflow_tracking_uri: str | None = None
 
 
 def dataset_to_xy(
@@ -148,6 +153,36 @@ def run_baseline(config: BaselineConfig) -> dict[str, object]:
         errors=errors,
     )
     dump(pipeline, config.output_dir / "model.joblib")
+    log_run(
+        MLflowRunConfig(
+            enabled=config.track_mlflow,
+            experiment_name=config.mlflow_experiment,
+            run_name=config.mlflow_run_name,
+            tracking_uri=config.mlflow_tracking_uri,
+        ),
+        params={
+            "model_family": "tfidf_logreg",
+            "dataset_name": config.dataset_name,
+            "sample_size": config.sample_size,
+            "feature_mode": config.feature_mode,
+            "max_features": config.max_features,
+            "ngram_max": config.ngram_max,
+            "min_df": config.min_df,
+            "char_max_features": config.char_max_features,
+            "char_ngram_min": config.char_ngram_min,
+            "char_ngram_max": config.char_ngram_max,
+            "regularization_c": config.regularization_c,
+            "max_iter": config.max_iter,
+            "random_state": config.random_state,
+        },
+        metrics={
+            "validation_accuracy": validation_metrics["accuracy"],
+            "validation_f1_macro": validation_metrics["f1_macro"],
+            "test_accuracy": test_metrics["accuracy"],
+            "test_f1_macro": test_metrics["f1_macro"],
+        },
+        artifacts_dir=config.output_dir,
+    )
 
     return {
         "pipeline": pipeline,
@@ -187,6 +222,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-iter", type=int, default=defaults.max_iter)
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts/baseline"))
+    parser.add_argument("--track-mlflow", action="store_true")
+    parser.add_argument(
+        "--mlflow-experiment",
+        default=defaults.mlflow_experiment,
+    )
+    parser.add_argument("--mlflow-run-name", default=defaults.mlflow_run_name)
+    parser.add_argument("--mlflow-tracking-uri", default=defaults.mlflow_tracking_uri)
     return parser.parse_args()
 
 
@@ -205,6 +247,10 @@ def main() -> None:
         regularization_c=args.regularization_c,
         max_iter=args.max_iter,
         output_dir=args.output_dir,
+        track_mlflow=args.track_mlflow,
+        mlflow_experiment=args.mlflow_experiment,
+        mlflow_run_name=args.mlflow_run_name,
+        mlflow_tracking_uri=args.mlflow_tracking_uri,
     )
     results = run_baseline(config)
 

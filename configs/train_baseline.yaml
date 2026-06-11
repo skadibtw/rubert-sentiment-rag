@@ -10,3 +10,7 @@ char_ngram_max: 5
 regularization_c: 0.7
 max_iter: 1000
 output_dir: artifacts/baseline
+track_mlflow: false
+mlflow_experiment: rubert-sentiment-rag
+mlflow_run_name: tfidf-logreg-baseline
+mlflow_tracking_uri:

@@ -11,5 +11,9 @@ sample_size:
 num_workers: 0
 output_dir: artifacts/bert_custom
 dropout: 0.1
+track_mlflow: false
+mlflow_experiment: rubert-sentiment-rag
+mlflow_run_name: rubert-custom-loop
+mlflow_tracking_uri:
 keep_label_text: false
 dry_run: false
