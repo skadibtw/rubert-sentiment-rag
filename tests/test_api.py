@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from joblib import dump
 
 api_module = importlib.import_module("src.api.app")
 
@@ -27,6 +28,16 @@ class FakePredictor:
                 scores={"negative": 0.1, "neutral": 0.2, "positive": 0.7},
             )
         ]
+
+
+class FakeSklearnPipeline:
+    def predict(self, texts):  # type: ignore[no-untyped-def]
+        del texts
+        return [2]
+
+    def predict_proba(self, texts):  # type: ignore[no-untyped-def]
+        del texts
+        return [[0.1, 0.2, 0.7]]
 
 
 class FakeRAG:
@@ -92,8 +103,15 @@ def test_predict_endpoint_uses_loaded_predictor(tmp_path, monkeypatch) -> None:
     assert payload["scores"]["positive"] == 0.7
 
 
-def test_predict_endpoint_uses_baseline_artifact_by_default(monkeypatch) -> None:
+def test_predict_endpoint_uses_baseline_artifact_by_default(
+    tmp_path, monkeypatch
+) -> None:
+    model_dir = tmp_path / "artifacts" / "baseline"
+    model_dir.mkdir(parents=True)
+    dump(FakeSklearnPipeline(), model_dir / "model.joblib")
+
     api_module.get_predictor.cache_clear()
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         api_module,
         "DEFAULT_MODEL_DIR",
